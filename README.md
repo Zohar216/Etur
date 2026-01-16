@@ -16,8 +16,6 @@
 - 📘 Typescript
 - 🎨 Tailwind CSS 4 - Class sorting, merging and linting
 - 🛠️ Shadcn/ui - Customizable UI components
-- 💵 Stripe - Payment handler
-- 🔒 Next-auth - Easy authentication library for Next.js (GitHub provider)
 - 🛡️ Drizzle - ORM for node.js
 - 🔍 Zod - Schema validation library
 - 🧪 Jest & React Testing Library - Configured for unit testing

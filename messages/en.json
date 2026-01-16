@@ -1,8 +1,14 @@
 {
   "home": {
     "signIn": "Sign in",
+    "signUp": "Sign up",
     "signOut": "Sign out",
-    "subtitle": "A Next.js starter template, packed with features like TypeScript, Tailwind CSS, Next-auth, Eslint, Stripe, testing tools and more. Jumpstart your project with efficiency and style.",
+    "subtitle": "A Next.js starter template, packed with features like TypeScript, Tailwind CSS, Eslint, testing tools and more. Jumpstart your project with efficiency and style.",
     "getStartedButton": "Get started"
+  },
+  "auth": {
+    "signIn": "Sign in",
+    "signUp": "Sign up",
+    "signOut": "Sign out"
   }
 }

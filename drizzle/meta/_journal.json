@@ -15,6 +15,20 @@
       "when": 1749407322022,
       "tag": "0001_small_sabra",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1749408000000,
+      "tag": "0002_remove_stripe_customer_id",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1749409000000,
+      "tag": "0003_add_password_to_user",
+      "breakpoints": true
     }
   ]
 }

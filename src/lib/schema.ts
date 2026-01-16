@@ -1,5 +1,3 @@
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
 import {
   boolean,
   integer,
@@ -8,20 +6,26 @@ import {
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
-import type { AdapterAccountType } from "next-auth/adapters";
+import { drizzle } from "drizzle-orm/postgres-js";
+import postgres from "postgres";
 
-const sql = neon(process.env.DATABASE_URL!);
-export const db = drizzle({ client: sql });
+const connectionString = process.env.DATABASE_URL!;
+const client = postgres(connectionString, {
+  max: 1,
+  idle_timeout: 20,
+  connect_timeout: 10,
+});
+export const db = drizzle(client);
 
 export const users = pgTable("user", {
   id: text("id")
     .primaryKey()
     .$defaultFn(() => crypto.randomUUID()),
   name: text("name"),
-  email: text("email").unique(),
+  email: text("email").unique().notNull(),
   emailVerified: timestamp("emailVerified", { mode: "date" }),
   image: text("image"),
-  stripeCustomerId: text("stripeCustomerId").unique(),
+  password: text("password").notNull(),
   isActive: boolean("isActive").default(false).notNull(),
 });
 
@@ -31,7 +35,7 @@ export const accounts = pgTable(
     userId: text("userId")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    type: text("type").$type<AdapterAccountType>().notNull(),
+    type: text("type").notNull(),
     provider: text("provider").notNull(),
     providerAccountId: text("providerAccountId").notNull(),
     refresh_token: text("refresh_token"),
