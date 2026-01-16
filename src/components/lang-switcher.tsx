@@ -12,15 +12,27 @@ type LangSwitcherProps = {
 export const LangSwitcher = ({ className }: LangSwitcherProps) => {
   const locale = useLocale();
 
+  const getNextLocale = () => {
+    if (locale === "he") return "en";
+    if (locale === "en") return "pl";
+    return "he";
+  };
+
+  const getLocaleLabel = () => {
+    if (locale === "he") return "EN";
+    if (locale === "en") return "PL";
+    return "HE";
+  };
+
   return (
     <Link
       className={cn(
         buttonVariants({ variant: "outline", size: "icon" }),
         className,
       )}
-      href={locale === "en" ? "/pl" : "/en"}
+      href={`/${getNextLocale()}`}
     >
-      {locale === "en" ? "PL" : "EN"}
+      {getLocaleLabel()}
     </Link>
   );
 };

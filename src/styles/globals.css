@@ -117,8 +117,24 @@
   body {
     @apply bg-background text-foreground;
   }
+  [dir="rtl"] {
+    direction: rtl;
+  }
+  [dir="ltr"] {
+    direction: ltr;
+  }
 }
 
 @utility container {
   @apply max-w-screen-xl mx-auto p-5;
+}
+
+[dir="rtl"] {
+  direction: rtl;
+  text-align: right;
+}
+
+[dir="ltr"] {
+  direction: ltr;
+  text-align: left;
 }

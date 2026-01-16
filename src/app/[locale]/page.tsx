@@ -33,13 +33,19 @@ const HomePage = async () => {
           {t("subtitle")}
         </p>
         <div className="mt-2 flex gap-4">
-          <Link
-            href="https://github.com/Skolaczk/next-starter/blob/main/README.md#getting-started"
-            target="_blank"
-            className={buttonVariants({ size: "lg" })}
-          >
-            {t("getStartedButton")}
-          </Link>
+          {session ? (
+            <Link href="/tasks" className={buttonVariants({ size: "lg" })}>
+              ניהול משימות
+            </Link>
+          ) : (
+            <Link
+              href="https://github.com/Skolaczk/next-starter/blob/main/README.md#getting-started"
+              target="_blank"
+              className={buttonVariants({ size: "lg" })}
+            >
+              {t("getStartedButton")}
+            </Link>
+          )}
           <Link
             href="https://github.com/Skolaczk/next-starter"
             target="_blank"

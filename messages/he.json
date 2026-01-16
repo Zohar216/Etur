@@ -1,0 +1,14 @@
+{
+  "home": {
+    "signIn": "התחבר",
+    "signUp": "הרשם",
+    "signOut": "התנתק",
+    "subtitle": "תבנית התחלה של Next.js, מלאה בתכונות כמו TypeScript, Tailwind CSS, Eslint, כלי בדיקה ועוד. התחל את הפרויקט שלך ביעילות ובסטייל.",
+    "getStartedButton": "התחל"
+  },
+  "auth": {
+    "signIn": "התחבר",
+    "signUp": "הרשם",
+    "signOut": "התנתק"
+  }
+}

@@ -4,9 +4,10 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { hasLocale, NextIntlClientProvider } from "next-intl";
 
-import { LangSwitcher } from "@/components/lang-switcher";
+import { FloatingControls } from "@/components/floating-controls";
+import { SessionProvider } from "@/components/session-provider";
+import { SidebarWrapper } from "@/components/sidebar-wrapper";
 import { ThemeProvider } from "@/components/theme-provider";
-import { ThemeSwitcher } from "@/components/theme-switcher";
 import { routing } from "@/i18n/routing";
 import { fonts } from "@/lib/fonts";
 import { siteConfig } from "@/lib/site-config";
@@ -58,16 +59,19 @@ const RootLayout = async ({
     notFound();
   }
 
+  const isRTL = locale === "he";
+
   return (
-    <html lang={locale} suppressHydrationWarning>
+    <html lang={locale} dir={isRTL ? "rtl" : "ltr"} suppressHydrationWarning>
       <body className={cn("min-h-screen font-sans", fonts)}>
-        <NextIntlClientProvider>
-          <ThemeProvider attribute="class">
-            {children}
-            <LangSwitcher className="absolute right-5 bottom-16 z-10" />
-            <ThemeSwitcher className="absolute right-5 bottom-5 z-10" />
-          </ThemeProvider>
-        </NextIntlClientProvider>
+        <SessionProvider>
+          <NextIntlClientProvider>
+            <ThemeProvider attribute="class">
+              <SidebarWrapper>{children}</SidebarWrapper>
+              <FloatingControls />
+            </ThemeProvider>
+          </NextIntlClientProvider>
+        </SessionProvider>
       </body>
     </html>
   );

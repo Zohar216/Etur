@@ -29,6 +29,13 @@
       "when": 1749409000000,
       "tag": "0003_add_password_to_user",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1749410000000,
+      "tag": "0004_create_tasks",
+      "breakpoints": true
     }
   ]
 }

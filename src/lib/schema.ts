@@ -101,3 +101,41 @@ export const authenticators = pgTable(
     },
   ],
 );
+
+export const tasks = pgTable("task", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  title: text("title").notNull(),
+  description: text("description"),
+  domain: text("domain").notNull(),
+  topic: text("topic").notNull(),
+  leaderId: text("leaderId")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  dueDate: timestamp("dueDate", { mode: "date" }),
+  priority: text("priority").notNull().default("medium"),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
+});
+
+export const taskUsers = pgTable(
+  "taskUser",
+  {
+    taskId: text("taskId")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: text("role").notNull().default("collaborator"),
+  },
+  (taskUser) => [
+    {
+      compositePK: primaryKey({
+        columns: [taskUser.taskId, taskUser.userId],
+      }),
+    },
+  ],
+);
