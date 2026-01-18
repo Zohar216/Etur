@@ -27,6 +27,7 @@ export const users = pgTable("user", {
   image: text("image"),
   password: text("password").notNull(),
   isActive: boolean("isActive").default(false).notNull(),
+  role: text("role").notNull().default("חפ״ש"),
 });
 
 export const accounts = pgTable(
@@ -135,6 +136,33 @@ export const taskUsers = pgTable(
     {
       compositePK: primaryKey({
         columns: [taskUser.taskId, taskUser.userId],
+      }),
+    },
+  ],
+);
+
+export const domains = pgTable("domain", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull().unique(),
+  createdAt: timestamp("createdAt", { mode: "date" }).defaultNow().notNull(),
+});
+
+export const userPinnedTasks = pgTable(
+  "userPinnedTask",
+  {
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    taskId: text("taskId")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+  },
+  (userPinnedTask) => [
+    {
+      compositePK: primaryKey({
+        columns: [userPinnedTask.userId, userPinnedTask.taskId],
       }),
     },
   ],

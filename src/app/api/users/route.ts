@@ -18,12 +18,20 @@ export async function GET(req: NextRequest) {
     }
 
     const users = await sql`
-      SELECT id, name, email, image, "isActive"
+      SELECT id, name, email, image, "isActive", role
       FROM "user"
       ORDER BY name, email
     `;
 
-    return NextResponse.json({ users }, { status: 200 });
+    return NextResponse.json(
+      { users },
+      {
+        status: 200,
+        headers: {
+          "Cache-Control": "public, s-maxage=300, stale-while-revalidate=600",
+        },
+      },
+    );
   } catch (error) {
     console.error("Get users error:", error);
     return NextResponse.json(

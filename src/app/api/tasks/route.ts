@@ -58,7 +58,12 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(
       { tasks: tasksWithCollaborators },
-      { status: 200 },
+      {
+        status: 200,
+        headers: {
+          "Cache-Control": "public, s-maxage=10, stale-while-revalidate=60",
+        },
+      },
     );
   } catch (error) {
     console.error("Get tasks error:", error);

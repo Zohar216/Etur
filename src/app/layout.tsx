@@ -1,14 +1,10 @@
 import "@/styles/globals.css";
 
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
-import { hasLocale, NextIntlClientProvider } from "next-intl";
 
-import { FloatingControls } from "@/components/floating-controls";
 import { SessionProvider } from "@/components/session-provider";
 import { SidebarWrapper } from "@/components/sidebar-wrapper";
 import { ThemeProvider } from "@/components/theme-provider";
-import { routing } from "@/i18n/routing";
 import { fonts } from "@/lib/fonts";
 import { siteConfig } from "@/lib/site-config";
 import { cn } from "@/lib/utils";
@@ -46,31 +42,14 @@ export const metadata: Metadata = {
   },
 };
 
-const RootLayout = async ({
-  children,
-  params,
-}: {
-  children: React.ReactNode;
-  params: Promise<{ locale: string }>;
-}) => {
-  const { locale } = await params;
-
-  if (!hasLocale(routing.locales, locale)) {
-    notFound();
-  }
-
-  const isRTL = locale === "he";
-
+const RootLayout = ({ children }: { children: React.ReactNode }) => {
   return (
-    <html lang={locale} dir={isRTL ? "rtl" : "ltr"} suppressHydrationWarning>
+    <html lang="he" dir="rtl" suppressHydrationWarning>
       <body className={cn("min-h-screen font-sans", fonts)}>
         <SessionProvider>
-          <NextIntlClientProvider>
-            <ThemeProvider attribute="class">
-              <SidebarWrapper>{children}</SidebarWrapper>
-              <FloatingControls />
-            </ThemeProvider>
-          </NextIntlClientProvider>
+          <ThemeProvider attribute="class">
+            <SidebarWrapper>{children}</SidebarWrapper>
+          </ThemeProvider>
         </SessionProvider>
       </body>
     </html>

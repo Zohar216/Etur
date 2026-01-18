@@ -1,8 +1,36 @@
-import { CheckSquare, Github, Moon, Sun } from "lucide-react";
+import {
+  Calendar,
+  CheckSquare,
+  ChevronLeft,
+  Github,
+  LayoutDashboard,
+  ListTodo,
+  LogOut,
+  Moon,
+  Plus,
+  Settings,
+  Signal,
+  Sun,
+  User,
+  Users,
+  X,
+} from "lucide-react";
 
 export const Icons = {
   sun: Sun,
   moon: Moon,
   github: Github,
   tasks: CheckSquare,
+  myTasks: ListTodo,
+  settings: Settings,
+  x: X,
+  dashboard: LayoutDashboard,
+  kanban: LayoutDashboard,
+  plus: Plus,
+  calendar: Calendar,
+  user: User,
+  users: Users,
+  signal: Signal,
+  chevronLeft: ChevronLeft,
+  logOut: LogOut,
 };

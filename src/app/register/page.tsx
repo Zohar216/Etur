@@ -33,13 +33,13 @@ export default function RegisterPage() {
       const data = await response.json();
 
       if (!response.ok) {
-        setError(data.error || "Something went wrong");
+        setError(data.error || "משהו השתבש");
         return;
       }
 
       router.push("/login");
     } catch {
-      setError("Something went wrong. Please try again.");
+      setError("משהו השתבש. נסה שוב.");
     } finally {
       setLoading(false);
     }
@@ -49,26 +49,26 @@ export default function RegisterPage() {
     <div className="container flex min-h-screen items-center justify-center">
       <div className="w-full max-w-md space-y-6 rounded-lg border p-8">
         <div className="space-y-2 text-center">
-          <h1 className="text-2xl font-bold">Sign Up</h1>
+          <h1 className="text-2xl font-bold">הרשמה</h1>
           <p className="text-muted-foreground text-sm">
-            Create an account to get started
+            צור חשבון כדי להתחיל
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="name">Name (optional)</Label>
+            <Label htmlFor="name">שם (אופציונלי)</Label>
             <Input
               id="name"
               type="text"
-              placeholder="Your name"
+              placeholder="השם שלך"
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">אימייל</Label>
             <Input
               id="email"
               type="email"
@@ -80,11 +80,11 @@ export default function RegisterPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password">סיסמה</Label>
             <Input
               id="password"
               type="password"
-              placeholder="Enter your password"
+              placeholder="הכנס סיסמה"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -94,16 +94,14 @@ export default function RegisterPage() {
           {error && <div className="text-destructive text-sm">{error}</div>}
 
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Creating account..." : "Sign Up"}
+            {loading ? "יוצר חשבון..." : "הירשם"}
           </Button>
         </form>
 
         <div className="text-center text-sm">
-          <span className="text-muted-foreground">
-            Already have an account?{" "}
-          </span>
+          <span className="text-muted-foreground">כבר יש לך חשבון? </span>
           <Link href="/login" className="text-primary hover:underline">
-            Sign in
+            התחבר
           </Link>
         </div>
       </div>

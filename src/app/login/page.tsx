@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
-import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -30,13 +29,13 @@ export default function LoginPage() {
       });
 
       if (result?.error) {
-        setError("Invalid email or password");
+        setError("אימייל או סיסמה שגויים");
       } else {
         router.push("/");
         router.refresh();
       }
     } catch {
-      setError("Something went wrong. Please try again.");
+      setError("משהו השתבש. נסה שוב.");
     } finally {
       setLoading(false);
     }
@@ -46,15 +45,15 @@ export default function LoginPage() {
     <div className="container flex min-h-screen items-center justify-center">
       <div className="w-full max-w-md space-y-6 rounded-lg border p-8">
         <div className="space-y-2 text-center">
-          <h1 className="text-2xl font-bold">Sign In</h1>
+          <h1 className="text-2xl font-bold">התחברות</h1>
           <p className="text-muted-foreground text-sm">
-            Enter your email and password to sign in
+            הכנס את האימייל והסיסמה שלך כדי להתחבר
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">אימייל</Label>
             <Input
               id="email"
               type="email"
@@ -66,11 +65,11 @@ export default function LoginPage() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+            <Label htmlFor="password">סיסמה</Label>
             <Input
               id="password"
               type="password"
-              placeholder="Enter your password"
+              placeholder="הכנס את הסיסמה שלך"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
@@ -80,16 +79,14 @@ export default function LoginPage() {
           {error && <div className="text-destructive text-sm">{error}</div>}
 
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Signing in..." : "Sign In"}
+            {loading ? "מתחבר..." : "התחבר"}
           </Button>
         </form>
 
         <div className="text-center text-sm">
-          <span className="text-muted-foreground">
-            Don&apos;t have an account?{" "}
-          </span>
+          <span className="text-muted-foreground">אין לך חשבון? </span>
           <Link href="/register" className="text-primary hover:underline">
-            Sign up
+            הירשם
           </Link>
         </div>
       </div>

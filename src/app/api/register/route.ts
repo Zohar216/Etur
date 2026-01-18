@@ -43,6 +43,22 @@ async function ensurePasswordColumn() {
   }
 }
 
+async function ensureRoleColumn() {
+  try {
+    await sql`SELECT role FROM "user" LIMIT 1`;
+  } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    if (errorMsg.includes("column") && errorMsg.includes("role")) {
+      try {
+        await sql`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "role" text NOT NULL DEFAULT 'חפ״ש'`;
+        await sql`UPDATE "user" SET "role" = 'חפ״ש' WHERE "role" IS NULL`;
+      } catch (migrationError) {
+        console.error("Role column migration error:", migrationError);
+      }
+    }
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     if (!process.env.DATABASE_URL) {
@@ -53,9 +69,10 @@ export async function POST(req: NextRequest) {
     }
 
     await ensurePasswordColumn();
+    await ensureRoleColumn();
 
     const body = await req.json();
-    const { email, password, name } = body;
+    const { email, password, name, role } = body;
 
     if (!email || !password) {
       return NextResponse.json(
@@ -79,8 +96,8 @@ export async function POST(req: NextRequest) {
     const userId = crypto.randomUUID();
 
     const newUser = await sql`
-      INSERT INTO "user" (id, email, password, name, "isActive")
-      VALUES (${userId}, ${email}, ${hashedPassword}, ${name || null}, false)
+      INSERT INTO "user" (id, email, password, name, "isActive", role)
+      VALUES (${userId}, ${email}, ${hashedPassword}, ${name || null}, false, 'חפ״ש')
       RETURNING id, email
     `;
 

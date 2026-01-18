@@ -1,9 +1,28 @@
-import createMiddleware from "next-intl/middleware";
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
-import { routing } from "./i18n/routing";
+import { auth } from "@/lib/auth";
 
-export default createMiddleware(routing);
+export async function middleware(request: NextRequest) {
+  const session = await auth();
+  const { pathname } = request.nextUrl;
+
+  const publicPaths = ["/login", "/register"];
+  const isPublicPath = publicPaths.some((path) => pathname.startsWith(path));
+
+  if (!session && !isPublicPath) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("callbackUrl", pathname);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  if (session && (pathname === "/login" || pathname === "/register")) {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
+
+  return NextResponse.next();
+}
 
 export const config = {
-  matcher: "/((?!api|trpc|_next|_vercel|.*\\..*).*)",
+  matcher: ["/((?!api|_next|_vercel|.*\\..*).*)"],
 };
