@@ -4,9 +4,32 @@ import { eq } from "drizzle-orm";
 import NextAuth from "next-auth";
 import { Adapter } from "next-auth/adapters";
 import CredentialsProvider from "next-auth/providers/credentials";
+import postgres from "postgres";
 
 import { env } from "@/env.mjs";
 import { db, users } from "@/lib/schema";
+
+const sql = postgres(process.env.DATABASE_URL!, {
+  max: 1,
+  idle_timeout: 20,
+  connect_timeout: 10,
+});
+
+async function ensureRoleColumn() {
+  try {
+    await sql`SELECT role FROM "user" LIMIT 1`;
+  } catch (error: unknown) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    if (errorMsg.includes("column") && errorMsg.includes("role")) {
+      try {
+        await sql`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "role" text NOT NULL DEFAULT 'חפ״ש'`;
+        await sql`UPDATE "user" SET "role" = 'חפ״ש' WHERE "role" IS NULL`;
+      } catch (migrationError) {
+        console.error("Role column migration error:", migrationError);
+      }
+    }
+  }
+}
 
 export const { auth, handlers, signIn, signOut } = NextAuth({
   adapter: DrizzleAdapter(db) as Adapter,
@@ -76,23 +99,32 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         token.role = (user as any).role || "חפ״ש";
       }
       
-      if (trigger === "update" || (token.id && !token.roleLastUpdated)) {
+      if (trigger === "update") {
         try {
+          await ensureRoleColumn();
           const currentUser = await db
             .select({ role: users.role })
             .from(users)
             .where(eq(users.id, token.id as string))
             .limit(1);
-
           if (currentUser.length > 0) {
             token.role = currentUser[0].role || "חפ״ש";
-            token.roleLastUpdated = Date.now();
           }
-        } catch (error) {
-          console.error("Error fetching user role in JWT:", error);
+        } catch {
+          try {
+            const [row] = await sql`
+              SELECT role FROM "user" WHERE id = ${token.id as string} LIMIT 1
+            `;
+            if (row) {
+              token.role = (row as { role: string }).role || "חפ״ש";
+            }
+          } catch {
+            token.role = token.role || "חפ״ש";
+          }
         }
       }
-      
+
+      token.role = token.role ?? "חפ״ש";
       return token;
     },
     async session({ session, token }) {

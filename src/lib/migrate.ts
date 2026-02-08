@@ -1,16 +1,16 @@
-import { neon } from "@neondatabase/serverless";
 import { readFileSync } from "fs";
 import { join } from "path";
+import postgres from "postgres";
 
-const sql = neon(process.env.DATABASE_URL!);
+const sql = postgres(process.env.DATABASE_URL!, {
+  max: 1,
+  idle_timeout: 20,
+  connect_timeout: 10,
+});
 
-export async function runMigration() {
+export async function runMigration(migrationFileName: string) {
   try {
-    const migrationPath = join(
-      process.cwd(),
-      "drizzle",
-      "0003_add_password_to_user.sql",
-    );
+    const migrationPath = join(process.cwd(), "drizzle", migrationFileName);
     const migrationSQL = readFileSync(migrationPath, "utf-8");
 
     const statements = migrationSQL
@@ -19,12 +19,14 @@ export async function runMigration() {
       .filter((s) => s.length > 0);
 
     for (const statement of statements) {
-      await sql(statement);
+      await sql.unsafe(statement);
     }
 
-    console.log("Migration completed successfully");
+    console.log(`Migration ${migrationFileName} completed successfully`);
+    await sql.end();
   } catch (error) {
     console.error("Migration error:", error);
+    await sql.end();
     throw error;
   }
 }

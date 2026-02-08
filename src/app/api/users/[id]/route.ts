@@ -11,7 +11,7 @@ const sql = postgres(process.env.DATABASE_URL!, {
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const session = await auth();
@@ -34,14 +34,14 @@ export async function PATCH(
     const body = await req.json();
     const { role } = body;
 
-    if (!role || !["מנהל", "חפ״ש"].includes(role)) {
+    if (!role || !["מנהל", "חפ״ש", "מפקד צוות"].includes(role)) {
       return NextResponse.json(
-        { error: "תפקיד לא תקין. אפשר לבחור רק 'מנהל' או 'חפ״ש'" },
+        { error: "תפקיד לא תקין. אפשר לבחור רק 'מנהל', 'מפקד צוות' או 'חפ״ש'" },
         { status: 400 },
       );
     }
 
-    const userId = params.id;
+    const { id: userId } = await params;
 
     const updatedUser = await sql`
       UPDATE "user"

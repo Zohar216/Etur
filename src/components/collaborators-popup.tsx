@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSession } from "next-auth/react";
 import { Avatar } from "@/components/avatar";
 import { Icons } from "@/components/icons";
 import { Button } from "@/components/ui/button";
@@ -27,10 +28,13 @@ export const CollaboratorsPopup = ({
   onCollaboratorAdded,
   onCollaboratorRemoved,
 }: CollaboratorsPopupProps) => {
+  const { data: session } = useSession();
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
   const [addingUserId, setAddingUserId] = useState<string | null>(null);
+  const userRole = (session?.user as any)?.role || "חפ״ש";
+  const canEdit = userRole === "מפקד צוות" || userRole === "מנהל";
 
   useEffect(() => {
     if (showAddMenu) {
@@ -137,13 +141,15 @@ export const CollaboratorsPopup = ({
           <div className="mb-2 flex items-center justify-between">
             <h3 className="text-xs font-semibold">משתתפים</h3>
             <div className="flex items-center gap-1">
-              <button
-                onClick={() => setShowAddMenu(!showAddMenu)}
-                className="text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
-                aria-label="הוסף משתתף"
-              >
-                <Icons.plus className="h-3.5 w-3.5" />
-              </button>
+              {canEdit && (
+                <button
+                  onClick={() => setShowAddMenu(!showAddMenu)}
+                  className="text-muted-foreground hover:text-foreground transition-colors p-0.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700"
+                  aria-label="הוסף משתתף"
+                >
+                  <Icons.plus className="h-3.5 w-3.5" />
+                </button>
+              )}
               <button
                 onClick={onClose}
                 className="text-muted-foreground hover:text-foreground transition-colors"
@@ -211,13 +217,15 @@ export const CollaboratorsPopup = ({
                       </p>
                     )}
                   </div>
-                  <button
-                    onClick={(e) => handleRemoveCollaborator(collab.id, e)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive p-0.5 rounded hover:bg-destructive/10"
-                    aria-label="הסר משתתף"
-                  >
-                    <Icons.x className="h-3 w-3" />
-                  </button>
+                  {canEdit && (
+                    <button
+                      onClick={(e) => handleRemoveCollaborator(collab.id, e)}
+                      className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive p-0.5 rounded hover:bg-destructive/10"
+                      aria-label="הסר משתתף"
+                    >
+                      <Icons.x className="h-3 w-3" />
+                    </button>
+                  )}
                 </div>
               ))
             ) : (

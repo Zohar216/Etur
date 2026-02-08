@@ -4,23 +4,24 @@ import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { useEffect, useState, useMemo } from "react";
 
-import { Avatar } from "@/components/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { Label } from "@/components/ui/label";
 import { Icons } from "@/components/icons";
+import { SECTION_OPTIONS, TOPICS_BY_SECTION } from "@/lib/topics";
 import { KanbanBoard } from "@/components/kanban-board";
 import { TaskDetailsPopup } from "@/components/task-details-popup";
 import { CollaboratorsPopup } from "@/components/collaborators-popup";
 import { SearchAndFilters } from "@/components/search-and-filters";
 import { PinnedTasksSidebar } from "@/components/pinned-tasks-sidebar";
-import type { Task } from "@/lib/task-types";
-import { getPriorityConfig, getStatusColor, statusConfig } from "@/lib/task-config";
+import { ParentTaskCard } from "@/components/parent-task-card";
+import { TaskCardSkeleton, ParentTaskCardSkeleton } from "@/components/task-card-skeleton";
+import type { Task, ParentTask } from "@/lib/task-types";
 
 export default function HomePage() {
   const { data: session } = useSession();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [parentTasks, setParentTasks] = useState<ParentTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDomain, setSelectedDomain] = useState<string>("all");
@@ -33,6 +34,7 @@ export default function HomePage() {
   const [pinnedTasks, setPinnedTasks] = useState<Set<string>>(new Set());
   const [isCreateTaskOpen, setIsCreateTaskOpen] = useState(false);
   const [pinnedTasksTab, setPinnedTasksTab] = useState<"active" | "completed">("active");
+  const [activeTab, setActiveTab] = useState<"tasks" | "parent-tasks">("tasks");
 
   useEffect(() => {
     if (!session?.user?.id) return;
@@ -54,17 +56,22 @@ export default function HomePage() {
   const [selectedDomainForTask, setSelectedDomainForTask] = useState<string>("");
   const [users, setUsers] = useState<Array<{ id: string; name: string | null; email: string }>>([]);
   const [domainsList, setDomainsList] = useState<Array<{ id: string; name: string }>>([]);
+  const [parentTasksList, setParentTasksList] = useState<Array<{ id: string; title: string; section: string; domain: string; topic: string }>>([]);
   const [createTaskLoading, setCreateTaskLoading] = useState(false);
   const [createTaskError, setCreateTaskError] = useState("");
+  const [createTaskMode, setCreateTaskMode] = useState<"parent" | "child" | "general">("parent");
+  const [createdParentTaskId, setCreatedParentTaskId] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
     domain: "",
     topic: "",
+    section: "",
     leaderId: "",
     dueDate: "",
     priority: "medium",
     collaboratorIds: [] as string[],
+    parentTaskId: "",
   });
 
   useEffect(() => {
@@ -105,11 +112,43 @@ export default function HomePage() {
       }
     };
 
+    const fetchParentTasks = async () => {
+      try {
+        const cacheKey = "parent-tasks";
+        const cached = sessionStorage.getItem(cacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          const now = Date.now();
+          if (now - parsed.timestamp < 10000) {
+            setParentTasks(parsed.data.parentTasks || []);
+            return;
+          }
+        }
+
+        const response = await fetch("/api/parent-tasks", {
+          next: { revalidate: 10 },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setParentTasks(data.parentTasks || []);
+          sessionStorage.setItem(
+            cacheKey,
+            JSON.stringify({ data, timestamp: Date.now() }),
+          );
+        }
+      } catch (err) {
+        console.error("Failed to fetch parent tasks:", err);
+      }
+    };
+
     fetchTasks();
+    fetchParentTasks();
 
     const handleTasksUpdated = () => {
       sessionStorage.removeItem("tasks");
+      sessionStorage.removeItem("parent-tasks");
       fetchTasks();
+      fetchParentTasks();
     };
 
     window.addEventListener("tasks-updated", handleTasksUpdated);
@@ -178,11 +217,24 @@ export default function HomePage() {
       }
     };
 
+    const fetchParentTasks = async () => {
+      try {
+        const response = await fetch("/api/parent-tasks");
+        if (response.ok) {
+          const data = await response.json();
+          setParentTasksList(data.parentTasks || []);
+        }
+      } catch (err) {
+        console.error("Failed to fetch parent tasks:", err);
+      }
+    };
+
     fetchUsers();
     fetchDomains();
+    fetchParentTasks();
   }, [isCreateTaskOpen]);
 
-  const handleStatusChange = async (taskId: string, newStatus: string) => {
+  const _handleStatusChange = async (taskId: string, newStatus: string) => {
     try {
       const response = await fetch(`/api/tasks/${taskId}`, {
         method: "PATCH",
@@ -313,17 +365,153 @@ export default function HomePage() {
     }
   };
 
+  const handleDeleteTask = async (taskId: string) => {
+    setTasks((prevTasks) => prevTasks.filter((t) => t.id !== taskId));
+    setPinnedTasks((prev) => {
+      const newSet = new Set(prev);
+      newSet.delete(taskId);
+      return newSet;
+    });
+    if (selectedTask?.id === taskId) {
+      setSelectedTask(null);
+    }
+    sessionStorage.removeItem("tasks");
+
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to delete task");
+      }
+      
+      window.dispatchEvent(new Event("tasks-updated"));
+      const fetchTasks = async () => {
+        try {
+          const response = await fetch("/api/tasks", {
+            next: { revalidate: 0 },
+          });
+          if (response.ok) {
+            const data = await response.json();
+            setTasks(data.tasks || []);
+            sessionStorage.setItem(
+              "tasks",
+              JSON.stringify({ data, timestamp: Date.now() }),
+            );
+          }
+        } catch (err) {
+          console.error("Failed to refresh tasks:", err);
+        }
+      };
+      fetchTasks();
+    } catch (err) {
+      console.error("Failed to delete task:", err);
+      sessionStorage.removeItem("tasks");
+      window.dispatchEvent(new Event("tasks-updated"));
+      const fetchTasks = async () => {
+        try {
+          const response = await fetch("/api/tasks", {
+            next: { revalidate: 0 },
+          });
+          if (response.ok) {
+            const data = await response.json();
+            setTasks(data.tasks || []);
+            sessionStorage.setItem(
+              "tasks",
+              JSON.stringify({ data, timestamp: Date.now() }),
+            );
+          }
+        } catch (err) {
+          console.error("Failed to refresh tasks:", err);
+        }
+      };
+      fetchTasks();
+      throw err;
+    }
+  };
+
+  const handleDeleteParentTask = async (taskId: string) => {
+    setParentTasks((prevTasks) => prevTasks.filter((t) => t.id !== taskId));
+    if (selectedTask?.id === taskId) {
+      setSelectedTask(null);
+    }
+    sessionStorage.removeItem("parent-tasks");
+
+    try {
+      const response = await fetch(`/api/parent-tasks/${taskId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || "Failed to delete parent task");
+      }
+      
+      window.dispatchEvent(new Event("tasks-updated"));
+      const fetchParentTasks = async () => {
+        try {
+          const response = await fetch("/api/parent-tasks", {
+            next: { revalidate: 0 },
+          });
+          if (response.ok) {
+            const data = await response.json();
+            setParentTasks(data.parentTasks || []);
+            sessionStorage.setItem(
+              "parent-tasks",
+              JSON.stringify({ data, timestamp: Date.now() }),
+            );
+          }
+        } catch (err) {
+          console.error("Failed to refresh parent tasks:", err);
+        }
+      };
+      fetchParentTasks();
+    } catch (err) {
+      console.error("Failed to delete parent task:", err);
+      sessionStorage.removeItem("parent-tasks");
+      window.dispatchEvent(new Event("tasks-updated"));
+      const fetchParentTasks = async () => {
+        try {
+          const response = await fetch("/api/parent-tasks", {
+            next: { revalidate: 0 },
+          });
+          if (response.ok) {
+            const data = await response.json();
+            setParentTasks(data.parentTasks || []);
+            sessionStorage.setItem(
+              "parent-tasks",
+              JSON.stringify({ data, timestamp: Date.now() }),
+            );
+          }
+        } catch (err) {
+          console.error("Failed to refresh parent tasks:", err);
+        }
+      };
+      fetchParentTasks();
+      throw err;
+    }
+  };
+
   const handleOpenCreateTask = (domain?: string) => {
     setSelectedDomainForTask(domain || "");
+    if (activeTab === "parent-tasks") {
+      setCreateTaskMode("parent");
+    } else {
+      setCreateTaskMode("general");
+    }
+    setCreatedParentTaskId(null);
     setFormData({
       title: "",
       description: "",
       domain: domain || "",
       topic: "",
+      section: "",
       leaderId: session?.user?.id || "",
       dueDate: "",
       priority: "medium",
       collaboratorIds: [],
+      parentTaskId: "",
     });
     setIsCreateTaskOpen(true);
   };
@@ -332,15 +520,19 @@ export default function HomePage() {
     setIsCreateTaskOpen(false);
     setSelectedDomainForTask("");
     setCreateTaskError("");
+    setCreateTaskMode("parent");
+    setCreatedParentTaskId(null);
     setFormData({
       title: "",
       description: "",
       domain: "",
       topic: "",
+      section: "",
       leaderId: session?.user?.id || "",
       dueDate: "",
       priority: "medium",
       collaboratorIds: [],
+      parentTaskId: "",
     });
   };
 
@@ -350,42 +542,83 @@ export default function HomePage() {
     setCreateTaskLoading(true);
 
     try {
-      const response = await fetch("/api/tasks", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          ...formData,
-          dueDate: formData.dueDate || null,
-        }),
-      });
+      if (activeTab === "parent-tasks") {
+        const response = await fetch("/api/parent-tasks", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            section: formData.section,
+            domain: formData.domain,
+            title: formData.title,
+            topic: formData.topic,
+            priority: formData.priority,
+          }),
+        });
+        const data = await response.json();
 
-      const data = await response.json();
+        if (!response.ok) {
+          setCreateTaskError(data.error || "משהו השתבש");
+          setCreateTaskLoading(false);
+          return;
+        }
 
-      if (!response.ok) {
-        setCreateTaskError(data.error || "משהו השתבש");
-        return;
-      }
+        sessionStorage.removeItem("parent-tasks");
+        setCreateTaskLoading(false);
+        handleCloseCreateTask();
+        
+        const refreshParentResponse = await fetch("/api/parent-tasks", {
+          next: { revalidate: 0 },
+        });
+        if (refreshParentResponse.ok) {
+          const refreshParentData = await refreshParentResponse.json();
+          setParentTasks(refreshParentData.parentTasks || []);
+          setParentTasksList(refreshParentData.parentTasks || []);
+        }
+        window.dispatchEvent(new Event("tasks-updated"));
+      } else {
+        const response = await fetch("/api/tasks", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            ...formData,
+            dueDate: formData.dueDate || null,
+            isGeneral: createTaskMode === "general",
+            parentTaskId: createTaskMode === "child" ? formData.parentTaskId : null,
+            topic: createTaskMode === "general" ? (formData.topic || "כללי") : formData.topic,
+          }),
+        });
+        const data = await response.json();
 
-      sessionStorage.removeItem("tasks");
-      sessionStorage.removeItem("my-tasks");
-      handleCloseCreateTask();
-      
-      const refreshResponse = await fetch("/api/tasks", {
-        next: { revalidate: 10 },
-      });
-      if (refreshResponse.ok) {
-        const refreshData = await refreshResponse.json();
-        setTasks(refreshData.tasks || []);
-        sessionStorage.setItem(
-          "tasks",
-          JSON.stringify({ data: refreshData, timestamp: Date.now() }),
-        );
+        if (!response.ok) {
+          setCreateTaskError(data.error || "משהו השתבש");
+          setCreateTaskLoading(false);
+          return;
+        }
+
+        sessionStorage.removeItem("tasks");
+        sessionStorage.removeItem("my-tasks");
+        setCreateTaskLoading(false);
+        handleCloseCreateTask();
+        
+        const refreshResponse = await fetch("/api/tasks", {
+          next: { revalidate: 0 },
+        });
+        if (refreshResponse.ok) {
+          const refreshData = await refreshResponse.json();
+          setTasks(refreshData.tasks || []);
+          sessionStorage.setItem(
+            "tasks",
+            JSON.stringify({ data: refreshData, timestamp: Date.now() }),
+          );
+        }
+        window.dispatchEvent(new Event("tasks-updated"));
       }
     } catch {
       setCreateTaskError("משהו השתבש. נסה שוב.");
-    } finally {
       setCreateTaskLoading(false);
     }
   };
@@ -417,76 +650,272 @@ export default function HomePage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto py-8">
-        <p className="text-muted-foreground">טוען משימות...</p>
+      <div className="container mx-auto py-6">
+        <div className="mb-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h1 className="text-3xl font-bold">לוח משימות</h1>
+            <div className="h-9 w-32 bg-gray-200 rounded-md animate-pulse" />
+          </div>
+
+          <div className="flex gap-2 border-b-2 border-gray-200">
+            <div className="h-12 w-24 bg-gray-200 rounded-t-lg animate-pulse" />
+            <div className="h-12 w-28 bg-gray-200 rounded-t-lg animate-pulse" />
+          </div>
+
+          <div className="h-10 bg-gray-100 rounded-md animate-pulse" />
+        </div>
+
+        <div className="flex gap-6">
+          <div className="flex-shrink-0" style={{ width: "520px" }}>
+            <div className="rounded-lg border bg-card p-4 animate-pulse">
+              <div className="h-6 w-32 bg-gray-200 rounded mb-4" />
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-20 bg-gray-100 rounded border" />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1">
+            <div className="flex gap-4 overflow-x-auto pb-4">
+              {["מיצוב", "איתור"].map((section) => (
+                <div
+                  key={section}
+                  className="flex min-w-[320px] max-w-[320px] flex-col rounded-lg border-2 border-gray-200 bg-gray-50 shadow-md"
+                >
+                  <div className="border-b-2 border-gray-200 bg-gray-100 p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="h-6 w-20 bg-gray-300 rounded animate-pulse" />
+                        <div className="h-6 w-8 bg-gray-300 rounded-full animate-pulse" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 space-y-3 overflow-y-auto p-4">
+                    {[1, 2, 3].map((i) => (
+                      <TaskCardSkeleton key={i} />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="container mx-auto py-6">
-      {/* Header with Search and Filters */}
+      {/* Header with Tabs */}
       <div className="mb-6 space-y-4">
         <div className="flex items-center justify-between">
           <h1 className="text-3xl font-bold">לוח משימות</h1>
-          <div className="flex gap-2">
-            <Button size="sm" onClick={() => handleOpenCreateTask()}>
-              <Icons.plus className="ml-2 h-4 w-4" />
-              משימה חדשה
-            </Button>
-          </div>
+          {((session?.user as any)?.role === "מפקד צוות" || (session?.user as any)?.role === "מנהל") && (
+            <div className="flex gap-2">
+              <Button 
+                size="sm" 
+                onClick={() => {
+                  if (activeTab === "parent-tasks") {
+                    setCreateTaskMode("parent");
+                  } else {
+                    setCreateTaskMode("general");
+                  }
+                  handleOpenCreateTask();
+                }}
+                className="bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-md hover:shadow-lg transition-all"
+              >
+                <Icons.plus className="ml-2 h-4 w-4" />
+                {activeTab === "parent-tasks" ? "משימת אב חדשה" : "משימה חדשה"}
+              </Button>
+            </div>
+          )}
         </div>
 
-        <SearchAndFilters
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          selectedDomain={selectedDomain}
-          onDomainChange={setSelectedDomain}
-          selectedTopic={selectedTopic}
-          onTopicChange={setSelectedTopic}
-          domains={domains}
-          topics={topics}
-        />
+        <div className="flex gap-2 border-b-2 border-gray-200">
+          <button
+            onClick={() => setActiveTab("tasks")}
+            className={`px-6 py-3 font-bold text-sm transition-all rounded-t-lg ${
+              activeTab === "tasks"
+                ? "bg-gradient-to-b from-blue-500 to-blue-600 text-white shadow-lg border-b-2 border-blue-700"
+                : "text-gray-600 hover:text-blue-600 hover:bg-blue-50"
+            }`}
+          >
+            משימות
+          </button>
+          <button
+            onClick={() => setActiveTab("parent-tasks")}
+            className={`px-6 py-3 font-bold text-sm transition-all rounded-t-lg ${
+              activeTab === "parent-tasks"
+                ? "bg-gradient-to-b from-purple-500 to-purple-600 text-white shadow-lg border-b-2 border-purple-700"
+                : "text-gray-600 hover:text-purple-600 hover:bg-purple-50"
+            }`}
+          >
+            משימות אב
+          </button>
+        </div>
+
+        {activeTab === "tasks" && (
+          <SearchAndFilters
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            selectedDomain={selectedDomain}
+            onDomainChange={setSelectedDomain}
+            selectedTopic={selectedTopic}
+            onTopicChange={setSelectedTopic}
+            domains={domains}
+            topics={topics}
+          />
+        )}
       </div>
 
       {/* Main Layout with Sidebar and Kanban */}
       <div className="flex gap-6">
-        <div className="flex-shrink-0" style={{ width: "520px" }}>
-          <PinnedTasksSidebar
-            pinnedTasks={pinnedTasks}
-            allTasks={filteredTasks}
-            activeTab={pinnedTasksTab}
-            onTabChange={setPinnedTasksTab}
-            onTaskClick={setSelectedTask}
-            onRemovePinned={handleRemovePinned}
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
-          />
-        </div>
+        {activeTab === "tasks" && (
+          <div className="flex-shrink-0" style={{ width: "520px", minWidth: "520px" }}>
+            <PinnedTasksSidebar
+              pinnedTasks={pinnedTasks}
+              allTasks={filteredTasks}
+              activeTab={pinnedTasksTab}
+              onTabChange={setPinnedTasksTab}
+              onTaskClick={setSelectedTask}
+              onRemovePinned={handleRemovePinned}
+              onDragOver={handleDragOver}
+              onDrop={handleDrop}
+            />
+          </div>
+        )}
 
-        <div className="flex-1">
-          {filteredTasks.length === 0 ? (
+        <div className={activeTab === "tasks" ? "flex-1 min-w-0" : "w-full"}>
+          {activeTab === "tasks" ? (
+            filteredTasks.length === 0 ? (
+              <div className="rounded-lg border bg-card p-12 text-center">
+                <p className="text-muted-foreground mb-4">
+                  {searchQuery || selectedDomain !== "all" || selectedTopic !== "all"
+                    ? "לא נמצאו משימות התואמות לחיפוש"
+                    : "אין משימות עדיין"}
+                </p>
+                {(!searchQuery && selectedDomain === "all" && selectedTopic === "all") && (
+                  <Button onClick={() => {
+                    setCreateTaskMode("general");
+                    handleOpenCreateTask();
+                  }}>
+                    צור משימה ראשונה
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <KanbanBoard
+                tasks={filteredTasks}
+                onTaskClick={setSelectedTask}
+                onCollaboratorsClick={handleCollaboratorsClick}
+                onCreateTask={(domain) => {
+                  setCreateTaskMode("general");
+                  handleOpenCreateTask(domain);
+                }}
+                onDragStart={handleDragStart}
+                showCreateButton={true}
+              />
+            )
+          ) : parentTasks.length === 0 ? (
             <div className="rounded-lg border bg-card p-12 text-center">
               <p className="text-muted-foreground mb-4">
-                {searchQuery || selectedDomain !== "all" || selectedTopic !== "all"
-                  ? "לא נמצאו משימות התואמות לחיפוש"
-                  : "אין משימות עדיין"}
+                אין משימות אב עדיין
               </p>
-              {(!searchQuery && selectedDomain === "all" && selectedTopic === "all") && (
-                <Button onClick={() => handleOpenCreateTask()}>
-                  צור משימה ראשונה
-                </Button>
-              )}
+              <Button onClick={() => {
+                setCreateTaskMode("parent");
+                handleOpenCreateTask();
+              }}>
+                צור משימת אב ראשונה
+              </Button>
             </div>
           ) : (
-            <KanbanBoard
-              tasks={filteredTasks}
-              onTaskClick={setSelectedTask}
-              onCollaboratorsClick={handleCollaboratorsClick}
-              onCreateTask={handleOpenCreateTask}
-              onDragStart={handleDragStart}
-              showCreateButton={true}
-            />
+            <div className="w-full">
+              <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+                {(() => {
+                  const sectionOrder = ["מיצוב", "איתור", "כללי"];
+                  const tasksBySection = parentTasks.reduce((acc, parentTask) => {
+                    const section = parentTask.section || "כללי";
+                    if (!acc[section]) {
+                      acc[section] = [];
+                    }
+                    acc[section].push(parentTask);
+                    return acc;
+                  }, {} as Record<string, typeof parentTasks>);
+
+                  return sectionOrder.map((section) => {
+                    const sectionTasks = tasksBySection[section] || [];
+                    const sortedTasks = [...sectionTasks].sort((a, b) => 
+                      (a.title || "").localeCompare(b.title || "", "he")
+                    );
+
+                    return (
+                      <div key={section} className="flex-shrink-0 w-full md:w-[320px] lg:w-[360px] space-y-4">
+                        <div className="sticky top-0 bg-background z-10 pb-3 mb-4 border-b-2 border-border">
+                          <div className="flex items-center justify-between">
+                            <h2 className="text-lg font-bold text-foreground">
+                              {section}
+                            </h2>
+                            <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">
+                              {sortedTasks.length}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="space-y-4 pr-2">
+                          {sortedTasks.map((parentTask) => {
+                            const childTasksForParent = tasks.filter(t => t.parentTaskId === parentTask.id);
+                            return (
+                              <ParentTaskCard
+                                key={parentTask.id}
+                                parentTask={parentTask}
+                                childTasks={childTasksForParent}
+                                onClick={async () => {
+                                  const parentTaskAsTask: Task = {
+                                    id: parentTask.id,
+                                    title: parentTask.title,
+                                    description: null,
+                                    parentTaskId: null,
+                                    parentTitle: null,
+                                    section: parentTask.section,
+                                    isGeneral: false,
+                                    domain: parentTask.domain,
+                                    topic: parentTask.topic,
+                                    leaderId: parentTask.createdByUserId,
+                                    leader_name: parentTask.createdBy_name,
+                                    leader_email: parentTask.createdBy_email,
+                                    dueDate: null,
+                                    priority: parentTask.priority,
+                                    status: "pending",
+                                    createdAt: parentTask.createdAt,
+                                    collaborators: [],
+                                    discussionCount: parentTask.discussionCount,
+                                    hasUnreadDiscussion: parentTask.hasUnreadDiscussion,
+                                  };
+                                  (parentTaskAsTask as any).isParentTask = true;
+                                  setSelectedTask(parentTaskAsTask);
+                                }}
+                                childTasksCount={childTasksForParent.length}
+                                onChildTaskClick={setSelectedTask}
+                                onChildCollaboratorsClick={handleCollaboratorsClick}
+                              />
+                            );
+                          })}
+                          {sortedTasks.length === 0 && (
+                            <div className="rounded-lg border border-dashed border-border bg-muted/30 p-12 text-center">
+                              <p className="text-sm text-muted-foreground">
+                                אין משימות אב במדור זה
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -497,10 +926,6 @@ export default function HomePage() {
           position={selectedTaskForCollaborators.position}
           onClose={() => setSelectedTaskForCollaborators(null)}
           onCollaboratorAdded={(collaborator) => {
-            const collaboratorWithRole = {
-              ...collaborator,
-              role: collaborator.role || "collaborator",
-            };
             setTasks((prevTasks) =>
               prevTasks.map((t) =>
                 t.id === selectedTaskForCollaborators.task.id
@@ -573,6 +998,23 @@ export default function HomePage() {
           task={selectedTask}
           onClose={() => setSelectedTask(null)}
           onCollaboratorsClick={handleCollaboratorsClick}
+          onDelete={(() => {
+            const isParentTask = (selectedTask as any).isParentTask || parentTasks.some(pt => pt.id === selectedTask.id);
+            return isParentTask ? handleDeleteParentTask : handleDeleteTask;
+          })()}
+          onStatusChange={(taskId, newStatus) => {
+            setTasks((prevTasks) =>
+              prevTasks.map((t) =>
+                t.id === taskId ? { ...t, status: newStatus } : t
+              )
+            );
+            if (selectedTask.id === taskId) {
+              setSelectedTask((prev) => ({ ...prev, status: newStatus }));
+            }
+            sessionStorage.removeItem("tasks");
+            sessionStorage.removeItem("my-tasks");
+            window.dispatchEvent(new Event("tasks-updated"));
+          }}
         />
       )}
 
@@ -581,10 +1023,16 @@ export default function HomePage() {
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
           onClick={handleCloseCreateTask}
+          onKeyDown={(e) => e.key === "Escape" && handleCloseCreateTask()}
+          role="button"
+          tabIndex={0}
         >
           <div
             className="relative rounded-xl border border-border bg-background p-6 shadow-lg max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            role="dialog"
+            tabIndex={-1}
           >
             <div className="mb-6 flex items-center justify-between">
               <h2 className="text-2xl font-bold">יצירת משימה חדשה</h2>
@@ -596,6 +1044,45 @@ export default function HomePage() {
                 <Icons.x className="h-5 w-5" />
               </button>
             </div>
+
+            {activeTab === "parent-tasks" ? (
+              <div className="mb-6 rounded-lg border border-blue-200 bg-blue-50 p-4">
+                <p className="text-sm text-blue-800">
+                  יצירת משימת אב חדשה
+                </p>
+              </div>
+            ) : (
+              <div className="mb-6 flex gap-2 border-b-2 border-gray-200 pb-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreateTaskMode("child");
+                    setFormData(prev => ({ ...prev, parentTaskId: "" }));
+                  }}
+                  className={`px-5 py-2.5 rounded-lg text-sm font-bold transition-all shadow-sm ${
+                    createTaskMode === "child"
+                      ? "bg-gradient-to-r from-green-500 to-green-600 text-white shadow-md hover:shadow-lg"
+                      : "bg-gray-100 text-gray-700 hover:bg-green-50 hover:text-green-700 hover:border-green-300 border-2 border-transparent"
+                  }`}
+                >
+                  משימת בן
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCreateTaskMode("general");
+                    setFormData(prev => ({ ...prev, parentTaskId: "", section: "", topic: "" }));
+                  }}
+                  className={`px-5 py-2.5 rounded-lg text-sm font-bold transition-all shadow-sm ${
+                    createTaskMode === "general"
+                      ? "bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-md hover:shadow-lg"
+                      : "bg-gray-100 text-gray-700 hover:bg-purple-50 hover:text-purple-700 hover:border-purple-300 border-2 border-transparent"
+                  }`}
+                >
+                  משימה כללית
+                </button>
+              </div>
+            )}
 
             <form onSubmit={handleCreateTaskSubmit} className="space-y-6">
               <div className="space-y-2">
@@ -629,6 +1116,63 @@ export default function HomePage() {
                 />
               </div>
 
+              {/* Section (for parent tasks and general tasks) */}
+              {(activeTab === "parent-tasks" || (activeTab === "tasks" && createTaskMode === "general")) && (
+                <div className="space-y-2">
+                  <label htmlFor="create-section" className="text-sm font-medium">
+                    מדור {activeTab === "parent-tasks" ? "*" : "(אופציונלי)"}
+                  </label>
+                  <Select
+                    id="create-section"
+                    value={formData.section}
+                    onChange={(e) => {
+                      setFormData({ ...formData, section: e.target.value, topic: "" });
+                    }}
+                    required={activeTab === "parent-tasks"}
+                  >
+                    <option value="">בחר מדור</option>
+                    {SECTION_OPTIONS.map((section) => (
+                      <option key={section} value={section}>
+                        {section}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              )}
+
+              {/* Parent task selector (for child tasks only) */}
+              {activeTab === "tasks" && createTaskMode === "child" && (
+                <div className="space-y-2">
+                  <label htmlFor="create-parent-task" className="text-sm font-medium">
+                    משימת אב *
+                  </label>
+                  <Select
+                    id="create-parent-task"
+                    value={formData.parentTaskId}
+                    onChange={(e) => {
+                      const selectedParent = parentTasksList.find((pt) => pt.id === e.target.value);
+                      setFormData({
+                        ...formData,
+                        parentTaskId: e.target.value,
+                        domain: selectedParent?.domain || formData.domain,
+                        section: selectedParent?.section || formData.section,
+                        topic: selectedParent?.topic || formData.topic,
+                      });
+                    }}
+                    required
+                  >
+                    <option value="">בחר משימת אב</option>
+                    {parentTasksList
+                      .filter(pt => !formData.domain || pt.domain === formData.domain)
+                      .map((pt) => (
+                        <option key={pt.id} value={pt.id}>
+                          {pt.title} ({pt.section} - {pt.topic})
+                        </option>
+                      ))}
+                  </Select>
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label htmlFor="create-domain" className="text-sm font-medium">
@@ -641,6 +1185,7 @@ export default function HomePage() {
                       setFormData({ ...formData, domain: e.target.value })
                     }
                     required
+                    disabled={((createTaskMode === "child" || createdParentTaskId) && !!formData.parentTaskId) || false}
                   >
                     <option value="">בחר תחום</option>
                     {domainsList.map((domain) => (
@@ -651,58 +1196,96 @@ export default function HomePage() {
                   </Select>
                 </div>
 
-                <div className="space-y-2">
-                  <label htmlFor="create-topic" className="text-sm font-medium">
-                    נושא *
-                  </label>
-                  <Input
-                    id="create-topic"
-                    type="text"
-                    placeholder="הכנס נושא ספציפי"
-                    value={formData.topic}
-                    onChange={(e) =>
-                      setFormData({ ...formData, topic: e.target.value })
-                    }
-                    required
-                  />
-                </div>
+                {activeTab === "parent-tasks" ? (
+                  <div className="space-y-2">
+                    <label htmlFor="create-topic" className="text-sm font-medium">
+                      נושא *
+                    </label>
+                    {formData.section ? (
+                      <Select
+                        id="create-topic"
+                        value={formData.topic}
+                        onChange={(e) =>
+                          setFormData({ ...formData, topic: e.target.value })
+                        }
+                        required
+                      >
+                        <option value="">בחר נושא</option>
+                        {TOPICS_BY_SECTION[formData.section as keyof typeof TOPICS_BY_SECTION]?.map((topic) => (
+                          <option key={topic} value={topic}>
+                            {topic}
+                          </option>
+                        ))}
+                      </Select>
+                    ) : (
+                      <Input
+                        id="create-topic"
+                        type="text"
+                        placeholder="בחר מדור קודם"
+                        value={formData.topic}
+                        disabled
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label htmlFor="create-topic" className="text-sm font-medium">
+                      נושא {createTaskMode === "general" ? "(אופציונלי)" : "*"}
+                    </label>
+                    <Input
+                      id="create-topic"
+                      type="text"
+                      placeholder={createTaskMode === "general" ? "אופציונלי" : "הכנס נושא ספציפי"}
+                      value={formData.topic}
+                      onChange={(e) =>
+                        setFormData({ ...formData, topic: e.target.value })
+                      }
+                      required={createTaskMode !== "general"}
+                      disabled={createTaskMode === "child" && !!formData.parentTaskId}
+                    />
+                  </div>
+                )}
               </div>
 
-              <div className="space-y-2">
-                <label htmlFor="create-leader" className="text-sm font-medium">
-                  מוביל המשימה *
-                </label>
-                <Select
-                  id="create-leader"
-                  value={formData.leaderId}
-                  onChange={(e) =>
-                    setFormData({ ...formData, leaderId: e.target.value })
-                  }
-                  required
-                >
-                  <option value="">בחר מוביל</option>
-                  {users.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.name || user.email}
-                      {user.email ? ` (${user.email})` : ""}
-                    </option>
-                  ))}
-                </Select>
-              </div>
+              {activeTab === "tasks" && (
+                <>
+                  <div className="space-y-2">
+                    <label htmlFor="create-leader" className="text-sm font-medium">
+                      מוביל המשימה *
+                    </label>
+                    <Select
+                      id="create-leader"
+                      value={formData.leaderId}
+                      onChange={(e) =>
+                        setFormData({ ...formData, leaderId: e.target.value })
+                      }
+                      required
+                    >
+                      <option value="">בחר מוביל</option>
+                      {users.map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {user.name || user.email}
+                          {user.email ? ` (${user.email})` : ""}
+                        </option>
+                      ))}
+                    </Select>
+                  </div>
 
-              <div className="space-y-2">
-                <label htmlFor="create-dueDate" className="text-sm font-medium">
-                  תאריך יעד (אופציונלי)
-                </label>
-                <Input
-                  id="create-dueDate"
-                  type="date"
-                  value={formData.dueDate}
-                  onChange={(e) =>
-                    setFormData({ ...formData, dueDate: e.target.value })
-                  }
-                />
-              </div>
+                  <div className="space-y-2">
+                    <label htmlFor="create-dueDate" className="text-sm font-medium">
+                      תאריך יעד (אופציונלי)
+                    </label>
+                    <Input
+                      id="create-dueDate"
+                      type="date"
+                      value={formData.dueDate}
+                      onChange={(e) =>
+                        setFormData({ ...formData, dueDate: e.target.value })
+                      }
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="space-y-2">
                 <label htmlFor="create-priority" className="text-sm font-medium">
@@ -722,44 +1305,58 @@ export default function HomePage() {
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-sm font-medium">שותפים למשימה</label>
-                <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-4">
-                  {users.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">
-                      אין משתמשים זמינים
-                    </p>
-                  ) : (
-                    users.map((user) => (
-                      <label
-                        key={user.id}
-                        className="flex cursor-pointer items-center gap-2"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={formData.collaboratorIds.includes(user.id)}
-                          onChange={() => handleCollaboratorToggle(user.id)}
-                          className="h-4 w-4 rounded border-gray-300"
-                        />
-                        <span className="text-sm">{user.name || user.email}</span>
-                      </label>
-                    ))
-                  )}
+              {activeTab === "tasks" && (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">שותפים למשימה</label>
+                  <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border p-4">
+                    {users.length === 0 ? (
+                      <p className="text-muted-foreground text-sm">
+                        אין משתמשים זמינים
+                      </p>
+                    ) : (
+                      users.map((user) => (
+                        <label
+                          key={user.id}
+                          className="flex cursor-pointer items-center gap-2"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={formData.collaboratorIds.includes(user.id)}
+                            onChange={() => handleCollaboratorToggle(user.id)}
+                            className="h-4 w-4 rounded border-gray-300"
+                          />
+                          <span className="text-sm">{user.name || user.email}</span>
+                        </label>
+                      ))
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {createTaskError && (
                 <div className="text-destructive text-sm">{createTaskError}</div>
               )}
 
               <div className="flex gap-4">
-                <Button type="submit" className="flex-1" disabled={createTaskLoading}>
-                  {createTaskLoading ? "יוצר משימה..." : "צור משימה"}
+                <Button 
+                  type="submit" 
+                  className={`flex-1 font-bold shadow-md hover:shadow-lg transition-all ${
+                    activeTab === "parent-tasks"
+                      ? "bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700 text-white"
+                      : "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white"
+                  }`}
+                  disabled={createTaskLoading}
+                >
+                  {createTaskLoading 
+                    ? "יוצר משימה..." 
+                    : activeTab === "parent-tasks"
+                      ? "צור משימת אב" 
+                      : "צור משימה"}
                 </Button>
                 <Button
                   type="button"
                   variant="outline"
-                  className="flex-1"
+                  className="flex-1 border-2 border-gray-300 hover:bg-gray-50 font-medium"
                   onClick={handleCloseCreateTask}
                 >
                   ביטול

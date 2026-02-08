@@ -8,6 +8,7 @@ import { TaskDetailsPopup } from "@/components/task-details-popup";
 import { CollaboratorsPopup } from "@/components/collaborators-popup";
 import { SearchAndFilters } from "@/components/search-and-filters";
 import { PinnedTasksSidebar } from "@/components/pinned-tasks-sidebar";
+import { TaskCardSkeleton } from "@/components/task-card-skeleton";
 import type { Task } from "@/lib/task-types";
 
 export default function MyTasksPage() {
@@ -212,6 +213,31 @@ export default function MyTasksPage() {
     }
   };
 
+  const handleDeleteTask = async (taskId: string) => {
+    try {
+      const response = await fetch(`/api/tasks/${taskId}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        setTasks((prevTasks) => prevTasks.filter((t) => t.id !== taskId));
+        setPinnedTasks((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(taskId);
+          return newSet;
+        });
+        if (session?.user?.id) {
+          sessionStorage.removeItem(`tasks-my-${session.user.id}`);
+        }
+      } else {
+        throw new Error("Failed to delete task");
+      }
+    } catch (err) {
+      console.error("Failed to delete task:", err);
+      throw err;
+    }
+  };
+
   if (!session) {
     return (
       <div className="container mx-auto py-8">
@@ -227,8 +253,53 @@ export default function MyTasksPage() {
 
   if (loading) {
     return (
-      <div className="container mx-auto py-8">
-        <p className="text-muted-foreground">טוען משימות...</p>
+      <div className="container mx-auto py-6">
+        <div className="mb-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h1 className="text-3xl font-bold">משימות שלי</h1>
+          </div>
+
+          <div className="h-10 bg-gray-100 rounded-md animate-pulse" />
+        </div>
+
+        <div className="flex gap-6">
+          <div className="flex-shrink-0" style={{ width: "520px" }}>
+            <div className="rounded-lg border bg-card p-4 animate-pulse">
+              <div className="h-6 w-32 bg-gray-200 rounded mb-4" />
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <div key={i} className="h-20 bg-gray-100 rounded border" />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex-1">
+            <div className="flex gap-4 overflow-x-auto pb-4">
+              {["מיצוב", "איתור"].map((section) => (
+                <div
+                  key={section}
+                  className="flex min-w-[320px] max-w-[320px] flex-col rounded-lg border-2 border-gray-200 bg-gray-50 shadow-md"
+                >
+                  <div className="border-b-2 border-gray-200 bg-gray-100 p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="h-6 w-20 bg-gray-300 rounded animate-pulse" />
+                        <div className="h-6 w-8 bg-gray-300 rounded-full animate-pulse" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex-1 space-y-3 overflow-y-auto p-4">
+                    {[1, 2, 3].map((i) => (
+                      <TaskCardSkeleton key={i} />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -290,6 +361,7 @@ export default function MyTasksPage() {
           task={selectedTask}
           onClose={() => setSelectedTask(null)}
           onCollaboratorsClick={handleCollaboratorsClick}
+          onDelete={handleDeleteTask}
         />
       )}
     </div>

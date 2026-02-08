@@ -103,12 +103,38 @@ export const authenticators = pgTable(
   ],
 );
 
+// Parent tasks (new level above existing tasks)
+export const parentTasks = pgTable("parentTask", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  section: text("section").notNull(), // "מיצוב" | "איתור"
+  domain: text("domain").notNull(),
+  title: text("title").notNull(),
+  // Per your latest choice: single topic on the parent (not multi-select)
+  topic: text("topic").notNull(),
+  priority: text("priority").notNull().default("medium"),
+  createdByUserId: text("createdByUserId")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
+});
+
 export const tasks = pgTable("task", {
   id: text("id")
     .primaryKey()
     .$defaultFn(() => crypto.randomUUID()),
   title: text("title").notNull(),
   description: text("description"),
+  // New hierarchy fields (nullable for backward compatibility)
+  parentTaskId: text("parentTaskId").references(() => parentTasks.id, {
+    onDelete: "set null",
+  }),
+  // Task classification: regular child-task vs general task
+  isGeneral: boolean("isGeneral").notNull().default(false),
+  // Section (מיצוב / איתור). Nullable for existing rows.
+  section: text("section"),
   domain: text("domain").notNull(),
   topic: text("topic").notNull(),
   leaderId: text("leaderId")
@@ -120,6 +146,57 @@ export const tasks = pgTable("task", {
   createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updatedAt", { mode: "date" }).notNull().defaultNow(),
 });
+
+// User -> topics mapping (what a soldier/team-lead can see)
+export const userTopics = pgTable(
+  "userTopic",
+  {
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    section: text("section").notNull(),
+    topic: text("topic").notNull(),
+  },
+  (userTopic) => [
+    {
+      compositePK: primaryKey({
+        columns: [userTopic.userId, userTopic.section, userTopic.topic],
+      }),
+    },
+  ],
+);
+
+export const discussionMessages = pgTable("discussionMessage", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  entityType: text("entityType").notNull(), // "task" | "parentTask"
+  entityId: text("entityId").notNull(),
+  userId: text("userId")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  createdAt: timestamp("createdAt", { mode: "date" }).notNull().defaultNow(),
+});
+
+export const discussionReadStates = pgTable(
+  "discussionReadState",
+  {
+    userId: text("userId")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    entityType: text("entityType").notNull(),
+    entityId: text("entityId").notNull(),
+    lastReadAt: timestamp("lastReadAt", { mode: "date" }).notNull().defaultNow(),
+  },
+  (state) => [
+    {
+      compositePK: primaryKey({
+        columns: [state.userId, state.entityType, state.entityId],
+      }),
+    },
+  ],
+);
 
 export const taskUsers = pgTable(
   "taskUser",
